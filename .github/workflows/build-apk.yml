@@ -37,22 +37,123 @@ jobs:
           p = Path("app/build.gradle.kts")
           s = p.read_text()
 
-          s = s.replace(
-              'defaultConfig {',
-              '''compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
+          if "sourceCompatibility = JavaVersion.VERSION_17" not in s:
+              s = s.replace(
+                  "defaultConfig {",
+                  """compileOptions {
+              sourceCompatibility = JavaVersion.VERSION_17
+              targetCompatibility = JavaVersion.VERSION_17
+          }
 
-              kotlin {
-                  jvmToolchain(17)
-              }
+          kotlin {
+              jvmToolchain(17)
+          }
 
-              defaultConfig {'''
-          )
+          defaultConfig {"""
+              )
 
           p.write_text(s)
           PY
+
+      - name: Fix Kotlin source
+        run: |
+          cd buildsrc/BossJobAssistant_Android_v0_1
+
+          cat > app/src/main/java/com/example/bossjobassistant/BossAccessibilityService.kt <<'EOF'
+          package com.example.bossjobassistant
+
+          import android.accessibilityservice.AccessibilityService
+          import android.view.accessibility.AccessibilityEvent
+          import android.view.accessibility.AccessibilityNodeInfo
+          import android.widget.Toast
+
+          class BossAccessibilityService : AccessibilityService() {
+
+              private var lastNotice = 0L
+
+              override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+                  val root = rootInActiveWindow ?: return
+                  val pageText = readNode(root).lowercase()
+
+                  val signals = listOf(
+                      "职位",
+                      "招聘",
+                      "薪资",
+                      "经验",
+                      "学历",
+                      "岗位"
+                  )
+
+                  if (signals.count { pageText.contains(it) } < 2) {
+                      return
+                  }
+
+                  val prefs = getSharedPreferences("config", MODE_PRIVATE)
+
+                  val keywordText =
+                      prefs.getString("keywords", "") ?: ""
+
+                  val excludeText =
+                      prefs.getString("exclude", "") ?: ""
+
+                  val keywords = keywordText
+                      .split(",")
+                      .map { it.trim().lowercase() }
+                      .filter { it.isNotEmpty() }
+
+                  val excludes = excludeText
+                      .split(",")
+                      .map { it.trim().lowercase() }
+                      .filter { it.isNotEmpty() }
+
+                  val matched =
+                      keywords.isEmpty() ||
+                      keywords.any { pageText.contains(it) }
+
+                  val blocked =
+                      excludes.any { pageText.contains(it) }
+
+                  if (
+                      matched &&
+                      !blocked &&
+                      System.currentTimeMillis() - lastNotice > 5000
+                  ) {
+                      lastNotice = System.currentTimeMillis()
+
+                      Toast.makeText(
+                          this,
+                          "发现符合条件岗位，请检查后手动投递",
+                          Toast.LENGTH_SHORT
+                      ).show()
+                  }
+              }
+
+              private fun readNode(node: AccessibilityNodeInfo): String {
+                  val result = StringBuilder()
+
+                  node.text?.let {
+                      result.append(it)
+                      result.append(' ')
+                  }
+
+                  node.contentDescription?.let {
+                      result.append(it)
+                      result.append(' ')
+                  }
+
+                  for (i in 0 until node.childCount) {
+                      val child = node.getChild(i) ?: continue
+                      result.append(readNode(child))
+                      child.recycle()
+                  }
+
+                  return result.toString()
+              }
+
+              override fun onInterrupt() {
+              }
+          }
+          EOF
 
       - name: Build APK
         run: |
