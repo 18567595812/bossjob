@@ -3,9 +3,6 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - 'BossJobAssistant_Android_v0_1.zip'
-      - '.github/workflows/build-apk.yml'
 
 jobs:
   build:
@@ -33,10 +30,10 @@ jobs:
 
       - name: Build APK
         run: |
-          gradle -p buildsrc :app:assembleDebug
+          gradle -p buildsrc/BossJobAssistant_Android_v0_1 :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: BossJobAssistant-debug-apk
-          path: buildsrc/app/build/outputs/apk/debug/app-debug.apk
+          path: buildsrc/BossJobAssistant_Android_v0_1/app/build/outputs/apk/debug/app-debug.apk
